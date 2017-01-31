@@ -2,12 +2,15 @@ from bs4 import BeautifulSoup
 import itertools
 import re
 import requests
+import requests_cache
 import collections
 import sys
 from math import factorial as fac
+
+requests_cache.install_cache('demo_cache')
+
 binom = lambda n, k: fac(n)//fac(n-k)//fac(k)
 inf = 10**10
-
 
 
 def tail(iterable):
@@ -18,13 +21,6 @@ def tail(iterable):
     except StopIteration:
         return []
     return it
-
-def peek(it):
-    try:
-        first = next(it)
-        return first, itertools.chain([first], it)
-    except TypeError:
-        return it[0], it
 
 def download_ljcr():
     ''' Download the La Jolla Covering Repository sizes '''
@@ -59,9 +55,7 @@ def download_design(v, k, t):
     for line in soup.pre.text.strip().splitlines():
         yield [int(c) for c in line.split()]
 
-def combine(design1, design2):
-    row, design1 = peek(design1)
-    v1 = len(row)
+def combine(v1, design1, design2):
     for row1 in design1:
         for row2 in design2:
             yield row1 + [c+v1 for c in row2]
@@ -112,11 +106,41 @@ def simple_product(ljcr, v, k, t):
                     bestt = size
                     bestk = k1
             sum_ += bestt
-            ks.append(bestk)
+            ks.append((t1, t-t1, bestk))
         if sum_ < best:
             best = sum_
             best_args = (v1, ks)
     return best, best_args
+
+def medium_product(ljcr, v, k, t):
+    # Somewhat more advanced than the simple_product, because we can use
+    # overlapping designs to sometimes save some overhead.
+    best, args = inf, ()
+    for v1 in range(1, v//2+2):
+        # dp[i][j] = Size of design supporting up to i columns in v1 and up
+        #            to j columns in v2.
+        dp = [[inf]*(t+1) for _ in range(t+1)]
+        dpk = [[-1]*(t+1) for _ in range(t+1)]
+        dpr = [[-1]*(t+1) for _ in range(t+1)]
+        for t1 in range(min(t,v1)+1):
+            for t2 in range(t-t1,min(t,v-v1)+1):
+                size1, k_ = min(((table(ljcr, v1, k1, t1) * table(ljcr, v-v1, k-k1, t2), k1)
+                        for k1 in range(max(t1, k-v+v1), min(v1, k-t2)+1)), default=(inf,-1))
+                size2, r_ = min(((dp[t1][r] + dp[t-r-1][t2], r) for r in range(t-t1,t2)), default=(inf,-1))
+                if size1 < dp[t1][t2] and size1 <= size2: dpk[t1][t2] = k_
+                if size2 < dp[t2][t2] and size2 <= size1: dpr[t1][t2] = r_
+                dp[t1][t2] = min(dp[t1][t2], size1, size2)
+        t1, t2 = min(t, v1), min(t, v-v1)
+        if dp[t1][t2] < best:
+            best = dp[t1][t2]
+            def recover(t1,t2):
+                if dpk[t1][t2] != -1:
+                    return ((t1, t2, dpk[t1][t2]),)
+                r = dpr[t1][t2]
+                assert r != -1
+                return recover(t1,r) + recover(t-r-1,t2)
+            args = (v1, recover(t1,t2))
+    return best, args
 
 def naur_product(ljcr, v, k, t):
     best, args = inf, (0,())
@@ -153,18 +177,6 @@ def segment_product(ljcr, v, k, t):
                 best, args = best_, (v1, t1, bestk)
     return best, args
 
-
-
-def splitter(m, b, t):
-    ''' Construct a list of partitions [m] -> [b], such that for any series of
-        t pairwise disjoint subsets S_1, ..., S_t from [m], there is a
-        partition that splits each one of S_1, ..., S_t. '''
-    pass
-
-# 1) Lav en der bruger en gammeldags splitter med segmenter af mange laengder.
-# 2) Lav en der bruger roterede segmenter af samme laengde.
-#    Et roteret segment af l;ngde alpha b'r d;kke en netop alpha-del af den samlede farvede m;ngde. Ja. S[ hvordan ser det ud som integers?
-
 def search(ljcr, algo):
     matches = 0
     for t in range(2, 9):
@@ -175,53 +187,68 @@ def search(ljcr, algo):
                     print('Ignoring', v, k, t, 'not in table', file=sys.stderr)
                     continue
                 size, args = algo(ljcr, v, k, t)
-                #size2, args2 = naur_product(ljcr, v, k, t)
-                #if size < size2:
-                #    print('Beat naur product for')
-                #    print(v, k, t, ':', tab, size, size2)
-                #print(v, k, t, ':', tab, size, end='')
-                #print(args)
-                #if tab == size:
-                #    print(' *')
-                #else: print()
-                if size <= tab and tab != inf:
-                    if size == tab:
+                size_actual = make_design(ljcr, v, k, t, algo, verbose=False)
+                if size_actual <= tab and tab != inf:
+                    if size_actual == tab:
                         matches += 1
-                        if matches % 1 == 0:
+                        if matches % 100 == 0:
                             print(v,k,t,'*')
                             print('Matches', matches)
-                    if size < tab:
-                        print(v,k,t, size, '<', tab, '!')
+                    if size_actual < tab:
+                        print(v,k,t, size_actual, '<', tab, '!')
     print('Matches', matches)
 
-def test(ljcr, v, k, t):
+def test(ljcr, v, k, t, algo):
     print('table:', table(ljcr, v, k, t))
-    prod, args = simple_product(ljcr, v, k, t)
+    prod, args = algo(ljcr, v, k, t)
     print('construct:', prod, args)
     v1, ks = args
-    for t1, k1 in zip(range(max(0, t-v+v1), min(t, v1)+1), ks):
+    for t1, t2, k1 in sorted(ks):
         print(
             v1, k1, t1, ':', table(ljcr, v1, k1, t1), ',',
-            v-v1, k-k1, t-t1, ':', table(ljcr, v-v1, k-k1, t-t1))
+            v-v1, k-k1, t2, ':', table(ljcr, v-v1, k-k1, t2))
 
-def make_design(ljcr, v, k, t):
-    prod, (v1, ks) = simple_product(ljcr, v, k, t)
-    print('Total expected size', prod, file=sys.stderr)
-    for t1, k1 in zip(range(max(0, t-v+v1), min(t, v1)+1), ks):
-        print('Doing', (v1, k1, t1), (v-v1,k-k1,t-t1), file=sys.stderr)
+def make_design(ljcr, v, k, t, algo, verbose=True):
+    prod, (v1, ks) = algo(ljcr, v, k, t)
+    if verbose:
+        print('Total expected size', prod, file=sys.stderr)
+    seen = set()
+    for t1, t2, k1 in ks:
+        if verbose:
+            print('Doing', (v1, k1, t1), (v-v1,k-k1,t2), file=sys.stderr)
         design1 = list(download_design(v1, k1, t1))
-        design2 = list(download_design(v-v1, k-k1, t-t1))
-        print('Sizes', len(design1), len(design2),
-                '(', table(ljcr,v1,k1,t1), table(ljcr,v-v1,k-k1,t-t1), ')',
-                file=sys.stderr)
-        for row in combine(design1, design2):
-            print(' '.join(map(str, row)))
-            pass
+        design2 = list(download_design(v-v1, k-k1, t2))
+        if verbose:
+            print('Sizes', len(design1), len(design2),
+                    '(', table(ljcr,v1,k1,t1), table(ljcr,v-v1,k-k1,t2), ')',
+                    file=sys.stderr)
+        for row in combine(v1, design1, design2):
+            row = tuple(sorted(row))
+            if row in seen:
+                if verbose:
+                    print('Skipping repeated row', row, file=sys.stderr)
+                continue
+            seen.add(row)
+            if verbose:
+                print(' '.join(map(str, row)))
+    if verbose:
+        print('Total size was:', len(seen), file=sys.stderr)
+    return len(seen)
+
+def fun(ljcr):
+    for _ in range(4):
+        import random
+        v = random.randrange(1, 100)
+        k = random.randrange(min(v,25)+1)
+        t = random.randrange(min(k,8)+1)
+        test(ljcr, v, k, t, medium_product)
+        test(ljcr, v, k, t, simple_product)
+        print()
 
 def main():
     ljcr = download_ljcr()
-    test(ljcr, 67, 10, 5)
-    #make_design(ljcr, 67, 10, 5)
+    #test(ljcr, 67, 10, 5, medium_product)
+    #make_design(ljcr, 5, 3, 2, medium_product)
     #prod, _ = simple_product(ljcr, 67, 10, 5)
     #settable(ljcr, 67, 10, 5, prod)
     #print('Search Segment')
@@ -230,6 +257,8 @@ def main():
     #search(ljcr, naur_product)
     #print('Search simple')
     #search(ljcr, simple_product)
+    #print('Search dynamic programming')
+    search(ljcr, medium_product)
 
 
 if __name__ == '__main__':
