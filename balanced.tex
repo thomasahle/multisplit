@@ -1,0 +1,66 @@
+\documentclass[11pt]{report}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage[utf8]{inputenc}
+
+\usepackage{pdfsync}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{amsthm}
+
+\usepackage{mathtools}
+
+\newtheorem{conjecture}{Conjecture}
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{fact}{Fact}
+\newtheorem{define}{Definition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{lemma}{Lemma}
+
+\newcommand{\um}{\scalebox{0.75}[1.0]{\( - \)}}
+\newcommand{\BOM}[1]{\Omega\left(#1\right)}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclarePairedDelimiterX{\infdivx}[2]{}{}{\left(#1\;\delimsize\middle\|\;#2\right)}
+\DeclareMathOperator*{\D}{D}
+\newcommand{\infdiv}{\D\infdivx}
+\DeclareMathOperator*{\HE}{H}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\B}{B}
+\DeclareMathOperator*{\E}{E}
+\DeclareMathOperator*{\dist}{d}
+\DeclareMathOperator*{\ale}{<\!\!<}
+\DeclareMathOperator*{\age}{>\!\!>}
+\newcommand\numberthis{\addtocounter{equation}{1}\tag{\theequation}}
+
+\begin{document}
+\section{Balanced splitters and Catalan numbers}
+\begin{definition}
+   A $(n,r,m)$-splitter, $S$, is a set of functions $s:[n]\to[m]$, such that for any set $R\subseteq[n]$ of size $|R|=r$, there is an $s\in S$ such that
+   \begin{align*}
+   %$
+      \lfloor r/m\rfloor \le
+      |s^{-1}(i)\cap R|
+      \le\lceil r/m\rceil
+   %$
+   \end{align*}
+   for all $i\in[m]$.
+
+   A balanced splitter is a splitter where for all $s\in S$ and $i\in[m]$,
+   %$
+   \begin{align*}
+      \lfloor n/m\rfloor \le
+      |s^{-1}(i)|
+      \le\lceil n/m\rceil
+      .
+   \end{align*}
+   %$
+\end{definition}
+
+
+
+
+\end{document}
+

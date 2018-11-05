@@ -1,0 +1,34 @@
+Ved du om der er en 1-1 funktion
+h : [p] -> [p]
+sådan at Pr[h(X) \subseteq S] er ca. (|S|/p)^|X|
+
+go to atm
+
+0358
+
+0358
+
+
+Let each coordinate be [1,m] uniformely iid.
+Then a 
+
+0 1 2
+
+[0,1] 3 2
+0 3 [1,2]
+1 3 [0,2]
+3 1 2 0 / 3 2 [0,1]
+
+
+
+q5n3
+
+[0,1] 4 [2,3]
+4 2 3 [1,0] / 4 3 2 [0,1] / 4 3 1 2 0
+
+q4n3
+[0,1] 3 2
+3 [0,1,2]
+/
+0 3 [1,2]
+3 1 2 0 / 3 2 [0,1]
